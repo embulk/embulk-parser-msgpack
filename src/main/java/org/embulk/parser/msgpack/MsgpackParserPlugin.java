@@ -264,29 +264,35 @@ public class MsgpackParserPlugin
             if (type instanceof BooleanType) {
                 setter = new BooleanColumnSetter(pageBuilder, column, defaultValue);
 
-            } else if (type instanceof LongType) {
+            }
+            else if (type instanceof LongType) {
                 setter = new LongColumnSetter(pageBuilder, column, defaultValue);
 
-            } else if (type instanceof DoubleType) {
+            }
+            else if (type instanceof DoubleType) {
                 setter = new DoubleColumnSetter(pageBuilder, column, defaultValue);
 
-            } else if (type instanceof StringType) {
+            }
+            else if (type instanceof StringType) {
                 TimestampFormatter formatter = new TimestampFormatter(formatterTask,
                         Optional.of(c.getOption().loadConfig(TimestampColumnOption.class)));
                 setter = new StringColumnSetter(pageBuilder, column, defaultValue, formatter);
 
-            } else if (type instanceof TimestampType) {
+            }
+            else if (type instanceof TimestampType) {
                 // TODO use flexible time format like Ruby's Time.parse
                 TimestampParser parser = timestampParsers[column.getIndex()];
                 setter = new TimestampColumnSetter(pageBuilder, column, defaultValue, parser);
 
-            } else if (type instanceof JsonType) {
+            }
+            else if (type instanceof JsonType) {
                 TimestampFormatter formatter = new TimestampFormatter(formatterTask,
                         Optional.of(c.getOption().loadConfig(TimestampColumnOption.class)));
                 setter = new JsonColumnSetter(pageBuilder, column, defaultValue, formatter);
 
-            } else {
-                throw new ConfigException("Unknown column type: "+type);
+            }
+            else {
+                throw new ConfigException("Unknown column type: " + type);
             }
 
             builder.put(column, setter);
@@ -317,10 +323,12 @@ public class MsgpackParserPlugin
                 BigInteger bi = unpacker.unpackBigInteger();
                 if (0 <= bi.compareTo(LONG_MIN) && bi.compareTo(LONG_MAX) <= 0) {
                     setter.set(bi.longValue());
-                } else {
+                }
+                else {
                     setter.setNull();  // TODO set default value
                 }
-            } else {
+            }
+            else {
                 setter.set(unpacker.unpackLong());
             }
             break;
@@ -372,14 +380,16 @@ public class MsgpackParserPlugin
             int n;
             try {
                 n = unpacker.unpackArrayHeader();
-            } catch (MessageInsufficientBufferException ex) {
+            }
+            catch (MessageInsufficientBufferException ex) {
                 // TODO EOFException?
                 return false;
             }
             for (int i = 0; i < n; i++) {
                 if (i < columnSetters.length) {
                     unpackToSetter(unpacker, columnSetters[i]);
-                } else {
+                }
+                else {
                     unpacker.skipValue();
                 }
             }
@@ -405,7 +415,8 @@ public class MsgpackParserPlugin
             int n;
             try {
                 n = unpacker.unpackMapHeader();
-            } catch (MessageInsufficientBufferException ex) {
+            }
+            catch (MessageInsufficientBufferException ex) {
                 // TODO EOFException?
                 return false;
             }
@@ -421,7 +432,8 @@ public class MsgpackParserPlugin
                 DynamicColumnSetter setter = columnSetters.get(key);
                 if (setter != null) {
                     unpackToSetter(unpacker, setter);
-                } else {
+                }
+                else {
                     unpacker.skipValue();
                 }
             }
@@ -455,7 +467,8 @@ public class MsgpackParserPlugin
                     offset += 1;
                 }
                 return 0;
-            } else {
+            }
+            else {
                 return o1.size() - o2.size();
             }
         }
