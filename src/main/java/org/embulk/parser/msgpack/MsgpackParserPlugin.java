@@ -6,10 +6,16 @@ import java.util.TreeMap;
 import java.util.Comparator;
 import java.io.IOException;
 import java.io.EOFException;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.google.common.collect.Lists;
+import org.embulk.spi.Exec;
+import org.embulk.spi.type.Types;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageFormat;
 import org.msgpack.core.MessageUnpacker;
@@ -58,6 +64,9 @@ import org.embulk.spi.util.dynamic.JsonColumnSetter;
 import org.embulk.spi.util.dynamic.DefaultValueSetter;
 import org.embulk.spi.util.dynamic.NullDefaultValueSetter;
 
+import static org.embulk.spi.Exec.newConfigSource;
+import static org.embulk.spi.type.Types.*;
+
 public class MsgpackParserPlugin
         implements ParserPlugin
 {
@@ -73,7 +82,8 @@ public class MsgpackParserPlugin
         public RowEncoding getRowEncoding();
 
         @Config("columns")
-        public SchemaConfig getSchemaConfig();
+        @ConfigDefault("null")
+        public Optional<SchemaConfig> getSchemaConfig();
 
         @ConfigInject
         public BufferAllocator getBufferAllocator();
@@ -194,8 +204,19 @@ public class MsgpackParserPlugin
     public void transaction(ConfigSource config, ParserPlugin.Control control)
     {
         PluginTask task = config.loadConfig(PluginTask.class);
+        control.run(task.dump(), getSchemaConfig(task).toSchema());
+    }
 
-        control.run(task.dump(), task.getSchemaConfig().toSchema());
+    @VisibleForTesting
+    SchemaConfig getSchemaConfig(PluginTask task)
+    {
+        Optional<SchemaConfig> schemaConfig = task.getSchemaConfig();
+        if (schemaConfig.isPresent()) {
+            return schemaConfig.get();
+        }
+        else {
+            return new SchemaConfig(ImmutableList.of(new ColumnConfig("record", JSON, newConfigSource())));
+        }
     }
 
     @Override
@@ -210,9 +231,9 @@ public class MsgpackParserPlugin
         try (MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(new FileInputMessageBufferInput(input));
                 PageBuilder pageBuilder = new PageBuilder(task.getBufferAllocator(), schema, output)) {
 
-            TimestampParser[] timestampParsers = Timestamps.newTimestampColumnParsers(task, task.getSchemaConfig());
+            TimestampParser[] timestampParsers = Timestamps.newTimestampColumnParsers(task, getSchemaConfig(task));
             Map<Column, DynamicColumnSetter> setters = newColumnSetters(pageBuilder,
-                    task.getSchemaConfig(), timestampParsers, taskSource.loadTask(PluginTaskFormatter.class));
+                    getSchemaConfig(task), timestampParsers, taskSource.loadTask(PluginTaskFormatter.class));
 
             RowReader reader;
             switch (rowEncoding) {

@@ -63,11 +63,15 @@ public class TestMsgpackParserPlugin
     @Test
     public void checkDefaultValues()
     {
-        ConfigSource config = this.config.deepCopy()
-                .set("columns", sampleSchema());
+        ConfigSource config = this.config.deepCopy();
         PluginTask task = config.loadConfig(PluginTask.class);
         assertEquals(FileEncoding.SEQUENCE, task.getFileEncoding());
         assertEquals(RowEncoding.MAP, task.getRowEncoding());
+
+        // columns
+        SchemaConfig schemaConfig = plugin.getSchemaConfig(task);
+        assertEquals(1, schemaConfig.getColumnCount());
+        assertEquals(Types.JSON, schemaConfig.getColumnType(0));
     }
 
     @Test(expected = ConfigException.class)
