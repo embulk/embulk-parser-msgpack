@@ -1,4 +1,4 @@
-package org.embulk.parser;
+package org.embulk.parser.msgpack;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
