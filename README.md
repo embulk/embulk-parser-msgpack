@@ -11,7 +11,7 @@ Parses files encoded in MessagePack.
 
 - **row_encoding**: type of a row. "array" or "map" (enum, default: map)
 - **file_encoding**: if a file includes a big array, set "array". Otherwise, if a file includes sequence of rows, set "sequence" (enum, default: sequence)
-- **columns**: description (schema, required)
+- **columns**: description (schema, default: a single Json typed column)
 
 ## Example
 
