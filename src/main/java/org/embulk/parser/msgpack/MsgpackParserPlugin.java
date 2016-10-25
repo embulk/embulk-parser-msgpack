@@ -22,6 +22,7 @@ import org.msgpack.core.MessageUnpacker;
 import org.msgpack.core.MessageInsufficientBufferException;
 import org.msgpack.core.buffer.MessageBuffer;
 import org.msgpack.core.buffer.MessageBufferInput;
+import org.msgpack.value.Value;
 import org.msgpack.value.ValueType;
 import org.embulk.config.Config;
 import org.embulk.config.ConfigException;
@@ -200,6 +201,11 @@ public class MsgpackParserPlugin
         }
     }
 
+    public MsgpackParserPlugin()
+    {
+        this.isSchemaful = true;
+    }
+
     @Override
     public void transaction(ConfigSource config, ParserPlugin.Control control)
     {
@@ -215,6 +221,7 @@ public class MsgpackParserPlugin
             return schemaConfig.get();
         }
         else {
+            this.isSchemaful = false;
             return new SchemaConfig(ImmutableList.of(new ColumnConfig("record", JSON, newConfigSource())));
         }
     }
@@ -238,10 +245,10 @@ public class MsgpackParserPlugin
             RowReader reader;
             switch (rowEncoding) {
             case ARRAY:
-                reader = new ArrayRowReader(setters);
+                reader = new ArrayRowReader(setters, isSchemaful);
                 break;
             case MAP:
-                reader = new MapRowReader(setters);
+                reader = new MapRowReader(setters, isSchemaful);
                 break;
             default:
                 throw new IllegalArgumentException("Unexpected row encoding");
@@ -387,16 +394,28 @@ public class MsgpackParserPlugin
             implements RowReader
     {
         private final DynamicColumnSetter[] columnSetters;
+        private final boolean isSchemaful;
 
-        public ArrayRowReader(Map<Column, DynamicColumnSetter> setters)
+        public ArrayRowReader(Map<Column, DynamicColumnSetter> setters, final boolean isSchemaful)
         {
             this.columnSetters = new DynamicColumnSetter[setters.size()];
             for (Map.Entry<Column, DynamicColumnSetter> pair : setters.entrySet()) {
                 columnSetters[pair.getKey().getIndex()] = pair.getValue();
             }
+            this.isSchemaful = isSchemaful;
         }
 
         public boolean next(MessageUnpacker unpacker) throws IOException
+        {
+            if (isSchemaful) {
+                return nextSchemaful(unpacker);
+            }
+            else {
+                return nextSchemaless(unpacker);
+            }
+        }
+
+        private boolean nextSchemaful(MessageUnpacker unpacker) throws IOException
         {
             int n;
             try {
@@ -416,22 +435,52 @@ public class MsgpackParserPlugin
             }
             return true;
         }
+
+        private boolean nextSchemaless(MessageUnpacker unpacker) throws IOException
+        {
+            if (columnSetters.length != 1 || (!(columnSetters[0] instanceof JsonColumnSetter))) {
+                throw new RuntimeException("FATAL unexpected error: DynamicColumnSetter is wrong for schemaless");
+            }
+
+            Value msgpackValue;
+            try {
+                msgpackValue = unpacker.unpackValue();
+            }
+            catch (MessageInsufficientBufferException ex) {
+                // TODO EOFException?
+                return false;
+            }
+            columnSetters[0].set(msgpackValue);
+            return true;
+        }
     }
 
     private class MapRowReader
             implements RowReader
     {
         private final Map<String, DynamicColumnSetter> columnSetters;
+        private final boolean isSchemaful;
 
-        public MapRowReader(Map<Column, DynamicColumnSetter> setters)
+        public MapRowReader(Map<Column, DynamicColumnSetter> setters, final boolean isSchemaful)
         {
             this.columnSetters = new TreeMap<>();
             for (Map.Entry<Column, DynamicColumnSetter> pair : setters.entrySet()) {
                 columnSetters.put(pair.getKey().getName(), pair.getValue());
             }
+            this.isSchemaful = isSchemaful;
         }
 
         public boolean next(MessageUnpacker unpacker) throws IOException
+        {
+            if (isSchemaful) {
+                return nextSchemaful(unpacker);
+            }
+            else {
+                return nextSchemaless(unpacker);
+            }
+        }
+
+        public boolean nextSchemaful(MessageUnpacker unpacker) throws IOException
         {
             int n;
             try {
@@ -458,6 +507,26 @@ public class MsgpackParserPlugin
                     unpacker.skipValue();
                 }
             }
+            return true;
+        }
+
+        private boolean nextSchemaless(MessageUnpacker unpacker) throws IOException
+        {
+            if (columnSetters.size() != 1 ||
+                (!columnSetters.containsKey("record")) ||
+                !(columnSetters.get("record") instanceof JsonColumnSetter)) {
+                throw new RuntimeException("FATAL unexpected error: DynamicColumnSetter is wrong for schemaless");
+            }
+
+            Value msgpackValue;
+            try {
+                msgpackValue = unpacker.unpackValue();
+            }
+            catch (MessageInsufficientBufferException ex) {
+                // TODO EOFException?
+                return false;
+            }
+            columnSetters.get("record").set(msgpackValue);
             return true;
         }
     }
@@ -494,4 +563,6 @@ public class MsgpackParserPlugin
             }
         }
     }
+
+    private boolean isSchemaful;
 }
