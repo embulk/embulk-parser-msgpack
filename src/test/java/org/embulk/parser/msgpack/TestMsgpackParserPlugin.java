@@ -1,4 +1,4 @@
-package org.embulk.parser;
+package org.embulk.parser.msgpack;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -28,6 +28,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
+import org.msgpack.value.ArrayValue;
 import org.msgpack.value.Value;
 
 import java.io.ByteArrayInputStream;
@@ -38,6 +39,7 @@ import java.util.List;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class TestMsgpackParserPlugin
 {
@@ -63,11 +65,15 @@ public class TestMsgpackParserPlugin
     @Test
     public void checkDefaultValues()
     {
-        ConfigSource config = this.config.deepCopy()
-                .set("columns", sampleSchema());
+        ConfigSource config = this.config.deepCopy();
         PluginTask task = config.loadConfig(PluginTask.class);
         assertEquals(FileEncoding.SEQUENCE, task.getFileEncoding());
         assertEquals(RowEncoding.MAP, task.getRowEncoding());
+
+        // columns
+        SchemaConfig schemaConfig = plugin.getSchemaConfig(task);
+        assertEquals(1, schemaConfig.getColumnCount());
+        assertEquals(Types.JSON, schemaConfig.getColumnType(0));
     }
 
     @Test(expected = ConfigException.class)
@@ -84,6 +90,14 @@ public class TestMsgpackParserPlugin
     {
         ConfigSource config = this.config.deepCopy()
                 .set("columns", sampleSchema())
+                .set("row_encoding", "invalid");
+        config.loadConfig(PluginTask.class);
+    }
+
+    @Test(expected = ConfigException.class)
+    public void throwConfigErrorIfSchemalessWithInvalidRowEncoding()
+    {
+        ConfigSource config = this.config.deepCopy()
                 .set("row_encoding", "invalid");
         config.loadConfig(PluginTask.class);
     }
@@ -196,6 +210,48 @@ public class TestMsgpackParserPlugin
     }
 
     @Test
+    public void parseSequentialSchemalessData()
+            throws IOException
+    {
+        SchemaConfig schema = schema(column("record", Types.JSON));
+        ConfigSource config = this.config.deepCopy().set("file_encoding", "sequence");
+
+        boolean vBoolean = random.nextBoolean();
+        String vString = nextString(random, random.nextInt(100));
+        double vDouble = random.nextDouble();
+        long vLong = random.nextLong();
+        String vJson = nextString(random, random.nextInt(100));
+
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            try (MessagePacker pk = MessagePack.newDefaultPacker(out)) {
+                pk.packArrayHeader(5) // 1 record
+                        .packBoolean(vBoolean)
+                        .packString(vString)
+                        .packString(vJson)
+                        .packDouble(vDouble)
+                        .packLong(vLong);
+            }
+
+            try (FileInput in = input(out.toByteArray())) {
+                transaction(config, input(out.toByteArray()), output);
+            }
+        }
+
+        List<Object[]> records = Pages.toObjects(schema.toSchema(), output.pages);
+        assertEquals(1, records.size());
+        for (Object[] record : records) {
+            assertEquals(1, record.length);
+            assertTrue(((Value) record[0]).isArrayValue());
+            ArrayValue v = ((Value) record[0]).asArrayValue();
+            assertEquals(vBoolean, v.get(0).asBooleanValue().getBoolean());
+            assertEquals(vString, v.get(1).asStringValue().asString());
+            assertEquals(vJson, v.get(2).asStringValue().asString());
+            assertEquals(vDouble, v.get(3).asFloatValue().toDouble(), 0.001);
+            assertEquals(vLong, v.get(4).asIntegerValue().toLong());
+        }
+    }
+
+    @Test
     public void parseSequenceMap()
             throws IOException
     {
@@ -299,6 +355,49 @@ public class TestMsgpackParserPlugin
             assertEquals(vDouble, (double) record[3], 0.001);
             assertEquals(vLong, record[4]);
             assertEquals(vTimestamp, ((Timestamp) record[5]).getEpochSecond());
+        }
+    }
+
+    @Test
+    public void parseArraySchemalessData()
+            throws IOException
+    {
+        SchemaConfig schema = schema(column("record", Types.JSON));
+        ConfigSource config = this.config.deepCopy().set("file_encoding", "array");
+
+        boolean vBoolean = random.nextBoolean();
+        String vString = nextString(random, random.nextInt(100));
+        double vDouble = random.nextDouble();
+        long vLong = random.nextLong();
+        String vJson = nextString(random, random.nextInt(100));
+
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            try (MessagePacker pk = MessagePack.newDefaultPacker(out)) {
+                pk.packArrayHeader(1)
+                        .packArrayHeader(5) // 1 record
+                        .packBoolean(vBoolean)
+                        .packString(vString)
+                        .packString(vJson)
+                        .packDouble(vDouble)
+                        .packLong(vLong);
+            }
+
+            try (FileInput in = input(out.toByteArray())) {
+                transaction(config, input(out.toByteArray()), output);
+            }
+        }
+
+        List<Object[]> records = Pages.toObjects(schema.toSchema(), output.pages);
+        assertEquals(1, records.size());
+        for (Object[] record : records) {
+            assertEquals(1, record.length);
+            assertTrue(((Value) record[0]).isArrayValue());
+            ArrayValue v = ((Value) record[0]).asArrayValue();
+            assertEquals(vBoolean, v.get(0).asBooleanValue().getBoolean());
+            assertEquals(vString, v.get(1).asStringValue().asString());
+            assertEquals(vJson, v.get(2).asStringValue().asString());
+            assertEquals(vDouble, v.get(3).asFloatValue().toDouble(), 0.001);
+            assertEquals(vLong, v.get(4).asIntegerValue().toLong());
         }
     }
 

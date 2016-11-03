@@ -6,16 +6,23 @@ import java.util.TreeMap;
 import java.util.Comparator;
 import java.io.IOException;
 import java.io.EOFException;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.google.common.collect.Lists;
+import org.embulk.spi.Exec;
+import org.embulk.spi.type.Types;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageFormat;
 import org.msgpack.core.MessageUnpacker;
 import org.msgpack.core.MessageInsufficientBufferException;
 import org.msgpack.core.buffer.MessageBuffer;
 import org.msgpack.core.buffer.MessageBufferInput;
+import org.msgpack.value.Value;
 import org.msgpack.value.ValueType;
 import org.embulk.config.Config;
 import org.embulk.config.ConfigException;
@@ -58,6 +65,9 @@ import org.embulk.spi.util.dynamic.JsonColumnSetter;
 import org.embulk.spi.util.dynamic.DefaultValueSetter;
 import org.embulk.spi.util.dynamic.NullDefaultValueSetter;
 
+import static org.embulk.spi.Exec.newConfigSource;
+import static org.embulk.spi.type.Types.*;
+
 public class MsgpackParserPlugin
         implements ParserPlugin
 {
@@ -73,10 +83,14 @@ public class MsgpackParserPlugin
         public RowEncoding getRowEncoding();
 
         @Config("columns")
-        public SchemaConfig getSchemaConfig();
+        @ConfigDefault("null")
+        public Optional<SchemaConfig> getSchemaConfig();
 
         @ConfigInject
         public BufferAllocator getBufferAllocator();
+
+        public void setSchemafulMode(boolean v);
+        public boolean getSchemafulMode();
     }
 
     public static enum FileEncoding
@@ -195,7 +209,30 @@ public class MsgpackParserPlugin
     {
         PluginTask task = config.loadConfig(PluginTask.class);
 
-        control.run(task.dump(), task.getSchemaConfig().toSchema());
+        if (!task.getSchemaConfig().isPresent()) {
+            // If columns: is not set, the parser behaves as non-schemaful mode. It doesn't care of row encoding.
+            if (config.has("row_encoding")) {
+                throw new ConfigException("Setting row_encoding: is invalid if columns: is not set.");
+            }
+            task.setSchemafulMode(false);
+        }
+        else {
+            task.setSchemafulMode(true);
+        }
+
+        control.run(task.dump(), getSchemaConfig(task).toSchema());
+    }
+
+    @VisibleForTesting
+    SchemaConfig getSchemaConfig(PluginTask task)
+    {
+        Optional<SchemaConfig> schemaConfig = task.getSchemaConfig();
+        if (schemaConfig.isPresent()) {
+            return schemaConfig.get();
+        }
+        else {
+            return new SchemaConfig(ImmutableList.of(new ColumnConfig("record", JSON, newConfigSource())));
+        }
     }
 
     @Override
@@ -204,41 +241,75 @@ public class MsgpackParserPlugin
     {
         PluginTask task = taskSource.loadTask(PluginTask.class);
 
-        RowEncoding rowEncoding = task.getRowEncoding();
+        boolean schemafulMode = task.getSchemafulMode();
         FileEncoding fileEncoding = task.getFileEncoding();
 
         try (MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(new FileInputMessageBufferInput(input));
                 PageBuilder pageBuilder = new PageBuilder(task.getBufferAllocator(), schema, output)) {
 
-            TimestampParser[] timestampParsers = Timestamps.newTimestampColumnParsers(task, task.getSchemaConfig());
-            Map<Column, DynamicColumnSetter> setters = newColumnSetters(pageBuilder,
-                    task.getSchemaConfig(), timestampParsers, taskSource.loadTask(PluginTaskFormatter.class));
+            if (schemafulMode) {
+                RowEncoding rowEncoding = task.getRowEncoding();
+                TimestampParser[] timestampParsers = Timestamps.newTimestampColumnParsers(task, getSchemaConfig(task));
+                Map<Column, DynamicColumnSetter> setters = newColumnSetters(pageBuilder,
+                        getSchemaConfig(task), timestampParsers, taskSource.loadTask(PluginTaskFormatter.class));
 
-            RowReader reader;
-            switch (rowEncoding) {
-            case ARRAY:
-                reader = new ArrayRowReader(setters);
-                break;
-            case MAP:
-                reader = new MapRowReader(setters);
-                break;
-            default:
-                throw new IllegalArgumentException("Unexpected row encoding");
-            }
-
-            while (input.nextFile()) {
-                switch (fileEncoding) {
-                case SEQUENCE:
-                    // do nothing
-                    break;
+                RowReader reader;
+                switch (rowEncoding) {
                 case ARRAY:
-                    // skip array header to convert array to sequence
-                    unpacker.unpackArrayHeader();
+                    reader = new ArrayRowReader(setters);
                     break;
+                case MAP:
+                    reader = new MapRowReader(setters);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unexpected row encoding");
                 }
 
-                while (reader.next(unpacker)) {
-                    pageBuilder.addRecord();
+                while (input.nextFile()) {
+                    switch (fileEncoding) {
+                    case SEQUENCE:
+                        // do nothing
+                        break;
+                    case ARRAY:
+                        // skip array header to convert array to sequence
+                        unpacker.unpackArrayHeader();
+                        break;
+                    }
+
+                    while (reader.next(unpacker)) {
+                        pageBuilder.addRecord();
+                    }
+                }
+            }
+            else {
+                // If non-schemaful mode, setters is not created.
+                while (input.nextFile()) {
+                    switch (fileEncoding) {
+                    case SEQUENCE:
+                        // do nothing
+                        break;
+                    case ARRAY:
+                        // skip array header to convert array to sequence
+                        unpacker.unpackArrayHeader();
+                        break;
+                    }
+
+                    while (true) {
+                        Value v;
+                        try {
+                            v = unpacker.unpackValue();
+                            if (v == null) {
+                                break;
+                            }
+                        }
+                        catch (MessageInsufficientBufferException e) {
+                            break;
+                        }
+
+                        // The unpacked Value object is set to a page as a Json column value.
+                        pageBuilder.setJson(0, v);
+                        pageBuilder.addRecord();
+                    }
                 }
             }
 
