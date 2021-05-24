@@ -150,6 +150,10 @@ gem {
     summary = "MessagePack parser plugin for Embulk"
     homepage = "https://github.com/embulk/embulk-parser-msgpack"
     licenses = [ "Apache-2.0" ]
+
+    into("lib/embulk/guess/") {
+        from "lib/embulk/guess/msgpack.rb"
+    }
 }
 
 gemPush {
