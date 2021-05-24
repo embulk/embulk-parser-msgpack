@@ -1,3 +1,19 @@
+/*
+ * Copyright 2015 The Embulk project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.embulk.parser.msgpack;
 
 import com.google.common.collect.ImmutableList;
@@ -6,23 +22,22 @@ import org.embulk.EmbulkTestRuntime;
 import org.embulk.config.ConfigException;
 import org.embulk.config.ConfigSource;
 import org.embulk.config.TaskSource;
-import org.embulk.parser.msgpack.MsgpackParserPlugin;
-import org.embulk.parser.msgpack.MsgpackParserPlugin.FileEncoding;
+import org.embulk.input.file.LocalFileInputPlugin;
 import org.embulk.parser.msgpack.MsgpackParserPlugin.PluginTask;
-import org.embulk.parser.msgpack.MsgpackParserPlugin.RowEncoding;
-import org.embulk.spi.ColumnConfig;
 import org.embulk.spi.FileInput;
 import org.embulk.spi.FileInputRunner;
 import org.embulk.spi.ParserPlugin;
 import org.embulk.spi.Schema;
-import org.embulk.spi.SchemaConfig;
 import org.embulk.spi.TestPageBuilderReader.MockPageOutput;
 import org.embulk.spi.time.Timestamp;
 import org.embulk.spi.type.Type;
 import org.embulk.spi.type.Types;
 import org.embulk.spi.util.InputStreamFileInput;
 import org.embulk.spi.util.Pages;
-import org.embulk.standards.LocalFileInputPlugin;
+import org.embulk.util.config.ConfigMapper;
+import org.embulk.util.config.ConfigMapperFactory;
+import org.embulk.util.config.units.ColumnConfig;
+import org.embulk.util.config.units.SchemaConfig;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,6 +58,9 @@ import static org.junit.Assert.assertTrue;
 
 public class TestMsgpackParserPlugin
 {
+    private static final ConfigMapperFactory CONFIG_MAPPER_FACTORY = ConfigMapperFactory.builder().addDefaultModules().build();
+    private static final ConfigMapper CONFIG_MAPPER = CONFIG_MAPPER_FACTORY.createConfigMapper();
+
     @Rule
     public EmbulkTestRuntime runtime = new EmbulkTestRuntime();
 
@@ -66,9 +84,9 @@ public class TestMsgpackParserPlugin
     public void checkDefaultValues()
     {
         ConfigSource config = this.config.deepCopy();
-        PluginTask task = config.loadConfig(PluginTask.class);
-        assertEquals(FileEncoding.SEQUENCE, task.getFileEncoding());
-        assertEquals(RowEncoding.MAP, task.getRowEncoding());
+        final PluginTask task = CONFIG_MAPPER.map(config, PluginTask.class);
+        assertEquals(MsgpackParserPlugin.FileEncoding.SEQUENCE, task.getFileEncoding());
+        assertEquals(MsgpackParserPlugin.RowEncoding.MAP, task.getRowEncoding());
 
         // columns
         SchemaConfig schemaConfig = plugin.getSchemaConfig(task);
@@ -82,7 +100,7 @@ public class TestMsgpackParserPlugin
         ConfigSource config = this.config.deepCopy()
                 .set("columns", sampleSchema())
                 .set("file_encoding", "invalid");
-        config.loadConfig(PluginTask.class);
+        CONFIG_MAPPER.map(config, PluginTask.class);
     }
 
     @Test(expected = ConfigException.class)
@@ -91,7 +109,7 @@ public class TestMsgpackParserPlugin
         ConfigSource config = this.config.deepCopy()
                 .set("columns", sampleSchema())
                 .set("row_encoding", "invalid");
-        config.loadConfig(PluginTask.class);
+        CONFIG_MAPPER.map(config, PluginTask.class);
     }
 
     @Test(expected = ConfigException.class)
@@ -99,7 +117,7 @@ public class TestMsgpackParserPlugin
     {
         ConfigSource config = this.config.deepCopy()
                 .set("row_encoding", "invalid");
-        config.loadConfig(PluginTask.class);
+        CONFIG_MAPPER.map(config, PluginTask.class);
     }
 
     @Test

@@ -1,19 +1,33 @@
+/*
+ * Copyright 2015 The Embulk project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.embulk.parser.msgpack;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.Comparator;
 import java.io.IOException;
-import java.io.EOFException;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
-import com.google.common.collect.Lists;
 import org.embulk.spi.Exec;
 import org.embulk.spi.type.Types;
 import org.msgpack.core.MessagePack;
@@ -23,28 +37,16 @@ import org.msgpack.core.MessageInsufficientBufferException;
 import org.msgpack.core.buffer.MessageBuffer;
 import org.msgpack.core.buffer.MessageBufferInput;
 import org.msgpack.value.Value;
-import org.msgpack.value.ValueType;
-import org.embulk.config.Config;
 import org.embulk.config.ConfigException;
-import org.embulk.config.ConfigDefault;
-import org.embulk.config.ConfigDiff;
-import org.embulk.config.ConfigInject;
 import org.embulk.config.ConfigSource;
-import org.embulk.config.Task;
 import org.embulk.config.TaskSource;
 import org.embulk.spi.Buffer;
 import org.embulk.spi.ParserPlugin;
 import org.embulk.spi.FileInput;
 import org.embulk.spi.PageOutput;
 import org.embulk.spi.Schema;
-import org.embulk.spi.SchemaConfig;
 import org.embulk.spi.Column;
-import org.embulk.spi.ColumnConfig;
-import org.embulk.spi.time.Timestamp;
-import org.embulk.spi.time.TimestampParser;
-import org.embulk.spi.time.TimestampFormatter;
 import org.embulk.spi.PageBuilder;
-import org.embulk.spi.BufferAllocator;
 import org.embulk.spi.type.Type;
 import org.embulk.spi.type.BooleanType;
 import org.embulk.spi.type.LongType;
@@ -52,27 +54,30 @@ import org.embulk.spi.type.DoubleType;
 import org.embulk.spi.type.StringType;
 import org.embulk.spi.type.TimestampType;
 import org.embulk.spi.type.JsonType;
-import org.embulk.spi.util.Timestamps;
-import org.embulk.spi.util.DynamicPageBuilder;
-import org.embulk.spi.util.DynamicColumnSetter;
-import org.embulk.spi.util.DynamicColumnSetterFactory;
-import org.embulk.spi.util.dynamic.BooleanColumnSetter;
-import org.embulk.spi.util.dynamic.LongColumnSetter;
-import org.embulk.spi.util.dynamic.DoubleColumnSetter;
-import org.embulk.spi.util.dynamic.StringColumnSetter;
-import org.embulk.spi.util.dynamic.TimestampColumnSetter;
-import org.embulk.spi.util.dynamic.JsonColumnSetter;
-import org.embulk.spi.util.dynamic.DefaultValueSetter;
-import org.embulk.spi.util.dynamic.NullDefaultValueSetter;
-
-import static org.embulk.spi.Exec.newConfigSource;
-import static org.embulk.spi.type.Types.*;
+import org.embulk.util.config.Config;
+import org.embulk.util.config.ConfigDefault;
+import org.embulk.util.config.ConfigMapper;
+import org.embulk.util.config.ConfigMapperFactory;
+import org.embulk.util.config.Task;
+import org.embulk.util.config.TaskMapper;
+import org.embulk.util.config.units.ColumnConfig;
+import org.embulk.util.config.units.SchemaConfig;
+import org.embulk.util.dynamic.BooleanColumnSetter;
+import org.embulk.util.dynamic.DefaultValueSetter;
+import org.embulk.util.dynamic.DoubleColumnSetter;
+import org.embulk.util.dynamic.DynamicColumnSetter;
+import org.embulk.util.dynamic.JsonColumnSetter;
+import org.embulk.util.dynamic.LongColumnSetter;
+import org.embulk.util.dynamic.NullDefaultValueSetter;
+import org.embulk.util.dynamic.StringColumnSetter;
+import org.embulk.util.dynamic.TimestampColumnSetter;
+import org.embulk.util.timestamp.TimestampFormatter;
 
 public class MsgpackParserPlugin
         implements ParserPlugin
 {
     public interface PluginTask
-            extends Task, TimestampParser.Task
+            extends Task
     {
         @Config("file_encoding")
         @ConfigDefault("\"sequence\"")
@@ -86,11 +91,40 @@ public class MsgpackParserPlugin
         @ConfigDefault("null")
         public Optional<SchemaConfig> getSchemaConfig();
 
-        @ConfigInject
-        public BufferAllocator getBufferAllocator();
+        // From org.embulk.spi.time.TimestampParser.Task
+        @Config("default_timezone")
+        @ConfigDefault("\"UTC\"")
+        public String getDefaultTimeZoneId();
+
+        // From org.embulk.spi.time.TimestampParser.Task
+        @Config("default_timestamp_format")
+        @ConfigDefault("\"%Y-%m-%d %H:%M:%S.%N %z\"")
+        public String getDefaultTimestampFormat();
+
+        // From org.embulk.spi.time.TimestampParser.Task
+        @Config("default_date")
+        @ConfigDefault("\"1970-01-01\"")
+        public String getDefaultDate();
 
         public void setSchemafulMode(boolean v);
         public boolean getSchemafulMode();
+    }
+
+    // From org.embulk.spi.time.TimestampParser.TimestampColumnOption
+    public interface TimestampColumnOptionForParsing
+            extends Task
+    {
+        @Config("timezone")
+        @ConfigDefault("null")
+        public Optional<String> getTimeZoneId();
+
+        @Config("format")
+        @ConfigDefault("null")
+        public Optional<String> getFormat();
+
+        @Config("date")
+        @ConfigDefault("null")
+        public Optional<String> getDate();
     }
 
     public static enum FileEncoding
@@ -160,12 +194,31 @@ public class MsgpackParserPlugin
     }
 
     public interface PluginTaskFormatter
-            extends Task, TimestampFormatter.Task
-    { }
+            extends Task
+    {
+        // From org.embulk.spi.time.TimestampFormatter.Task
+        @Config("default_timezone")
+        @ConfigDefault("\"UTC\"")
+        public String getDefaultTimeZoneId();
 
-    private interface TimestampColumnOption
-            extends Task, TimestampFormatter.TimestampColumnOption
-    { }
+        // From org.embulk.spi.time.TimestampFormatter.Task
+        @Config("default_timestamp_format")
+        @ConfigDefault("\"%Y-%m-%d %H:%M:%S.%6N %z\"")
+        public String getDefaultTimestampFormat();
+    }
+
+    // From org.embulk.spi.time.TimestampFormatter.TimestampColumnOption
+    public interface TimestampColumnOptionForFormatting
+            extends Task
+    {
+        @Config("timezone")
+        @ConfigDefault("null")
+        public Optional<String> getTimeZoneId();
+
+        @Config("format")
+        @ConfigDefault("null")
+        public Optional<String> getFormat();
+    }
 
     private static class FileInputMessageBufferInput
             implements MessageBufferInput
@@ -207,7 +260,7 @@ public class MsgpackParserPlugin
     @Override
     public void transaction(ConfigSource config, ParserPlugin.Control control)
     {
-        PluginTask task = config.loadConfig(PluginTask.class);
+        final PluginTask task = CONFIG_MAPPER.map(config, PluginTask.class);
 
         if (!task.getSchemaConfig().isPresent()) {
             // If columns: is not set, the parser behaves as non-schemaful mode. It doesn't care of row encoding.
@@ -223,7 +276,6 @@ public class MsgpackParserPlugin
         control.run(task.dump(), getSchemaConfig(task).toSchema());
     }
 
-    @VisibleForTesting
     SchemaConfig getSchemaConfig(PluginTask task)
     {
         Optional<SchemaConfig> schemaConfig = task.getSchemaConfig();
@@ -231,7 +283,9 @@ public class MsgpackParserPlugin
             return schemaConfig.get();
         }
         else {
-            return new SchemaConfig(ImmutableList.of(new ColumnConfig("record", JSON, newConfigSource())));
+            final ArrayList<ColumnConfig> columnConfigs = new ArrayList<>();
+            columnConfigs.add(new ColumnConfig("record", Types.JSON, CONFIG_MAPPER_FACTORY.newConfigSource()));
+            return new SchemaConfig(Collections.unmodifiableList(columnConfigs));
         }
     }
 
@@ -239,19 +293,20 @@ public class MsgpackParserPlugin
     public void run(TaskSource taskSource, Schema schema,
             FileInput input, PageOutput output)
     {
-        PluginTask task = taskSource.loadTask(PluginTask.class);
+        final PluginTask task = TASK_MAPPER.map(taskSource, PluginTask.class);
 
         boolean schemafulMode = task.getSchemafulMode();
         FileEncoding fileEncoding = task.getFileEncoding();
 
         try (MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(new FileInputMessageBufferInput(input));
-                PageBuilder pageBuilder = new PageBuilder(task.getBufferAllocator(), schema, output)) {
+                final PageBuilder pageBuilder = Exec.getPageBuilder(Exec.getBufferAllocator(), schema, output)) {
 
             if (schemafulMode) {
                 RowEncoding rowEncoding = task.getRowEncoding();
-                TimestampParser[] timestampParsers = Timestamps.newTimestampColumnParsers(task, getSchemaConfig(task));
+                final TimestampFormatter[] timestampFormattersForParsing =
+                        newTimestampColumnFormattersForParsing(task, getSchemaConfig(task));
                 Map<Column, DynamicColumnSetter> setters = newColumnSetters(pageBuilder,
-                        getSchemaConfig(task), timestampParsers, taskSource.loadTask(PluginTaskFormatter.class));
+                        getSchemaConfig(task), timestampFormattersForParsing, TASK_MAPPER.map(taskSource, PluginTaskFormatter.class));
 
                 RowReader reader;
                 switch (rowEncoding) {
@@ -320,10 +375,40 @@ public class MsgpackParserPlugin
         }
     }
 
+    public static TimestampFormatter[] newTimestampColumnFormattersForParsing(final PluginTask task, final SchemaConfig schema) {
+        final TimestampFormatter[] formatters = new TimestampFormatter[schema.getColumnCount()];
+        int i = 0;
+        for (final ColumnConfig column : schema.getColumns()) {
+            if (column.getType() instanceof TimestampType) {
+                final TimestampColumnOptionForParsing columnOption = CONFIG_MAPPER.map(column.getOption(), TimestampColumnOptionForParsing.class);
+
+                final String pattern = columnOption.getFormat().orElse(task.getDefaultTimestampFormat());
+                formatters[i] = TimestampFormatter.builder(pattern, true)
+                        .setDefaultZoneFromString(columnOption.getTimeZoneId().orElse(task.getDefaultTimeZoneId()))
+                        .setDefaultDateFromString(columnOption.getDate().orElse(task.getDefaultDate()))
+                        .build();
+            }
+            i++;
+        }
+        return formatters;
+    }
+
+    public static TimestampFormatter newTimestampFormatterForFormatting(
+            final PluginTaskFormatter formatterTask, final ColumnConfig c) {
+        final TimestampColumnOptionForFormatting columnOption =
+                CONFIG_MAPPER.map(c.getOption(), TimestampColumnOptionForFormatting.class);
+
+        final String pattern = columnOption.getFormat().orElse(formatterTask.getDefaultTimestampFormat());
+
+        return TimestampFormatter.builder(pattern, true)
+                .setDefaultZoneFromString(columnOption.getTimeZoneId().orElse(formatterTask.getDefaultTimeZoneId()))
+                .build();
+    }
+
     private Map<Column, DynamicColumnSetter> newColumnSetters(PageBuilder pageBuilder,
-            SchemaConfig schema, TimestampParser[] timestampParsers, TimestampFormatter.Task formatterTask)
+            SchemaConfig schema, TimestampFormatter[] timestampFormattersForParsing, PluginTaskFormatter formatterTask)
     {
-        ImmutableMap.Builder<Column, DynamicColumnSetter> builder = ImmutableMap.builder();
+        final LinkedHashMap<Column, DynamicColumnSetter> builder = new LinkedHashMap<>();
         int index = 0;
         for (ColumnConfig c : schema.getColumns()) {
             Column column = c.toColumn(index);
@@ -345,20 +430,17 @@ public class MsgpackParserPlugin
 
             }
             else if (type instanceof StringType) {
-                TimestampFormatter formatter = new TimestampFormatter(formatterTask,
-                        Optional.of(c.getOption().loadConfig(TimestampColumnOption.class)));
+                final TimestampFormatter formatter = newTimestampFormatterForFormatting(formatterTask, c);
                 setter = new StringColumnSetter(pageBuilder, column, defaultValue, formatter);
 
             }
             else if (type instanceof TimestampType) {
-                // TODO use flexible time format like Ruby's Time.parse
-                TimestampParser parser = timestampParsers[column.getIndex()];
-                setter = new TimestampColumnSetter(pageBuilder, column, defaultValue, parser);
+                final TimestampFormatter formatterForParsing = timestampFormattersForParsing[column.getIndex()];
+                setter = new TimestampColumnSetter(pageBuilder, column, defaultValue, formatterForParsing);
 
             }
             else if (type instanceof JsonType) {
-                TimestampFormatter formatter = new TimestampFormatter(formatterTask,
-                        Optional.of(c.getOption().loadConfig(TimestampColumnOption.class)));
+                final TimestampFormatter formatter = newTimestampFormatterForFormatting(formatterTask, c);
                 setter = new JsonColumnSetter(pageBuilder, column, defaultValue, formatter);
 
             }
@@ -369,7 +451,7 @@ public class MsgpackParserPlugin
             builder.put(column, setter);
             index++;
         }
-        return builder.build();
+        return Collections.unmodifiableMap(builder);
     }
 
     private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
@@ -544,4 +626,8 @@ public class MsgpackParserPlugin
             }
         }
     }
+
+    private static final ConfigMapperFactory CONFIG_MAPPER_FACTORY = ConfigMapperFactory.builder().addDefaultModules().build();
+    private static final ConfigMapper CONFIG_MAPPER = CONFIG_MAPPER_FACTORY.createConfigMapper();
+    private static final TaskMapper TASK_MAPPER = CONFIG_MAPPER_FACTORY.createTaskMapper();
 }
