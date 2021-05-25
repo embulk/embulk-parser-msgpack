@@ -1,6 +1,7 @@
 plugins {
     id "java"
     id "maven-publish"
+    id "signing"
     id "org.embulk.embulk-plugins" version "0.4.2"
     id "checkstyle"
     id "jacoco"
@@ -80,7 +81,7 @@ javadocJar {
 
 publishing {
     publications {
-        embulkPluginMaven(MavenPublication) {
+        maven(MavenPublication) {
             groupId = project.group
             artifactId = project.name
 
@@ -142,6 +143,10 @@ publishing {
             }
         }
     }
+}
+
+signing {
+    sign publishing.publications.maven
 }
 
 gem {
