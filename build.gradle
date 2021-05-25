@@ -159,6 +159,10 @@ gem {
     into("lib/embulk/guess/") {
         from "lib/embulk/guess/msgpack.rb"
     }
+
+    from rootProject.file("LICENSE")
+    from rootProject.file("NOTICE_GEM")
+    rename ("NOTICE_GEM", "NOTICE")
 }
 
 gemPush {
