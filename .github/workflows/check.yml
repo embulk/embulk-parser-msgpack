@@ -1,14 +1,27 @@
-name: Test
-on: push
+name: Check
+on: [ pull_request, push ]
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  check:
+    runs-on: ${{ matrix.os }}
+    # push: always run.
+    # pull_request: run only when the PR is submitted from a forked repository, not within this repository.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - ubuntu-latest
+        - macOS-latest
+        - windows-latest
     steps:
+    - name: Set Git's core.autocrlf to false for Windows before checkout
+      run: git config --global core.autocrlf false
     - uses: actions/checkout@v2
-    - name: Set up JDK 8
+    - name: Set up OpenJDK 8
       uses: actions/setup-java@v2
       with:
         java-version: 8
-        distribution: "zulu"
-    - name: Build with testing
+        distribution: "temurin"
+        cache: "gradle"
+    - name: Check
       run: ./gradlew --stacktrace check
