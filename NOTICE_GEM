@@ -1,11 +1,17 @@
 embulk-parser-msgpack
-Copyright 2015 The Embulk project
+Copyright 2015-2022 Sadayuki Furuhashi, and the Embulk project.
 
-The gem distribution of this product includes software developed in a part of the Embulk project (https://www.embulk.org/).
-It has been licenced under the Apache Software License, Version 2.0.
+This product includes software developed at
+The Embulk project (https://www.embulk.org/).
 
-The gem distribution of this product includes JARs of the Jackson project (https://github.com/FasterXML/jackson), as-is.
+
+The RubyGems distribution of this product bundles products of
+the Jackson project, as-is.
 They are licensed under the Apache Software License, Version 2.0.
+See: https://github.com/FasterXML/jackson
 
-The gem distribution of this product includes JARs of the Jakarta Bean Validation API 1.1 (https://beanvalidation.org/1.1/), as-is.
-It is licensed under the Apache Software License, Version 2.0.
+
+The RubyGems distribution of this product bundles products of
+the Jakarta Bean Validation API 1.1, as-is.
+They are licensed under the Apache Software License, Version 2.0.
+See: https://beanvalidation.org/1.1/
