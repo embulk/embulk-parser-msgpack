@@ -51,7 +51,7 @@ dependencies {
     compile "javax.validation:validation-api:1.1.0.Final"
 
     compile "org.embulk:embulk-util-timestamp:0.2.1"
-    compile "org.embulk:embulk-util-dynamic:0.1.0"
+    compile "org.embulk:embulk-util-dynamic:0.1.1"
 
     testCompile "junit:junit:4.13.2"
     testCompile "org.embulk:embulk-junit4:0.10.36"
