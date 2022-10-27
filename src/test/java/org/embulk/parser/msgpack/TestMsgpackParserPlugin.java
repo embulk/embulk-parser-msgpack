@@ -421,7 +421,7 @@ public class TestMsgpackParserPlugin
 
     private ConfigSource config()
     {
-        return runtime.getExec().newConfigSource();
+        return CONFIG_MAPPER_FACTORY.newConfigSource();
     }
 
     private SchemaConfig sampleSchema()
