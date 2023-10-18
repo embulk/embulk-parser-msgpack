@@ -16,24 +16,24 @@
 
 package org.embulk.parser.msgpack;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import org.embulk.EmbulkTestRuntime;
+import org.embulk.EmbulkSystemProperties;
 import org.embulk.config.ConfigException;
 import org.embulk.config.ConfigSource;
 import org.embulk.config.TaskSource;
 import org.embulk.input.file.LocalFileInputPlugin;
 import org.embulk.parser.msgpack.MsgpackParserPlugin.PluginTask;
+import org.embulk.spi.Column;
 import org.embulk.spi.FileInput;
 import org.embulk.spi.FileInputRunner;
 import org.embulk.spi.ParserPlugin;
 import org.embulk.spi.Schema;
-import org.embulk.spi.TestPageBuilderReader.MockPageOutput;
 import org.embulk.spi.time.Timestamp;
 import org.embulk.spi.type.Type;
 import org.embulk.spi.type.Types;
 import org.embulk.spi.util.InputStreamFileInput;
 import org.embulk.spi.util.Pages;
+import org.embulk.test.EmbulkTestRuntime;
+import org.embulk.test.TestPageBuilderReader.MockPageOutput;
 import org.embulk.util.config.ConfigMapper;
 import org.embulk.util.config.ConfigMapperFactory;
 import org.embulk.util.config.units.ColumnConfig;
@@ -50,8 +50,11 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -76,7 +79,7 @@ public class TestMsgpackParserPlugin
         config = config().set("type", "msgpack");
         random = runtime.getRandom();
         plugin = new MsgpackParserPlugin();
-        runner = new FileInputRunner(new LocalFileInputPlugin());
+        runner = new FileInputRunner(new LocalFileInputPlugin(), EmbulkSystemProperties.of(new Properties()));
         output = new MockPageOutput();
     }
 
@@ -431,7 +434,7 @@ public class TestMsgpackParserPlugin
 
     private SchemaConfig schema(ColumnConfig... columns)
     {
-        return new SchemaConfig(Lists.newArrayList(columns));
+        return new SchemaConfig(new ArrayList<ColumnConfig>(Arrays.asList(columns)));
     }
 
     private ColumnConfig column(String name, Type type)
@@ -463,7 +466,7 @@ public class TestMsgpackParserPlugin
 
     private InputStreamFileInput.IteratorProvider provider(InputStream... inputStreams)
     {
-        return new InputStreamFileInput.IteratorProvider(ImmutableList.copyOf(inputStreams));
+        return new InputStreamFileInput.IteratorProvider(Arrays.asList(inputStreams));
     }
 
     private static String nextString(Random random, int lengthBound)

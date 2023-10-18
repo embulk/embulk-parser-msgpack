@@ -2,7 +2,7 @@ plugins {
     id "java"
     id "maven-publish"
     id "signing"
-    id "org.embulk.embulk-plugins" version "0.5.4"
+    id "org.embulk.embulk-plugins" version "0.6.1"
     id "checkstyle"
     id "jacoco"
 }
@@ -15,24 +15,24 @@ group = "org.embulk"
 version = "0.5.0-SNAPSHOT"
 description = "Parses files encoded in MessagePack."
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
-
 tasks.withType(JavaCompile) {
     options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
     options.encoding = "UTF-8"
 }
 
 java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+
     withJavadocJar()
     withSourcesJar()
 }
 
 dependencies {
-    compileOnly "org.embulk:embulk-api:0.10.36"
-    compileOnly "org.embulk:embulk-spi:0.10.36"
+    compileOnly "org.embulk:embulk-spi:0.11"
 
-    implementation("org.embulk:embulk-util-config:0.3.1") {
+    implementation("org.embulk:embulk-util-config:0.3.4") {
         // They conflict with embulk-core. They are once excluded here,
         // and added explicitly with versions exactly the same with older embulk-core (until 0.10.31).
         exclude group: "com.fasterxml.jackson.core", module: "jackson-annotations"
@@ -46,18 +46,20 @@ dependencies {
     // and added explicitly with versions exactly the same with older embulk-core (until 0.10.31).
     implementation "com.fasterxml.jackson.core:jackson-annotations:2.6.7"
     implementation "com.fasterxml.jackson.core:jackson-core:2.6.7"
-    implementation "com.fasterxml.jackson.core:jackson-databind:2.6.7"
+    implementation "com.fasterxml.jackson.core:jackson-databind:2.6.7.5"
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.6.7"
     implementation "javax.validation:validation-api:1.1.0.Final"
 
-    implementation "org.embulk:embulk-util-timestamp:0.2.1"
+    implementation "org.embulk:embulk-util-timestamp:0.2.2"
     implementation "org.embulk:embulk-util-dynamic:0.1.1"
 
     testImplementation "junit:junit:4.13.2"
-    testImplementation "org.embulk:embulk-junit4:0.10.36"
-    testImplementation "org.embulk:embulk-core:0.10.36"
-    testImplementation "org.embulk:embulk-deps:0.10.36"
-    testImplementation "org.embulk:embulk-input-file:0.10.36"
+    testImplementation "org.slf4j:slf4j-simple:2.0.7"
+    testImplementation "org.embulk:embulk-spi:0.11"
+    testImplementation "org.embulk:embulk-junit4:0.11.1"
+    testImplementation "org.embulk:embulk-core:0.11.1"
+    testImplementation "org.embulk:embulk-deps:0.11.1"
+    testImplementation "org.embulk:embulk-input-file:0.11.0"
 }
 
 embulkPlugin {
@@ -87,6 +89,25 @@ javadocJar {
     }
 }
 
+// A safer and strict alternative to: "dependencies" (and "dependencies --write-locks")
+//
+// This task fails explicitly when the specified dependency is not available.
+// In contrast, "dependencies (--write-locks)" does not fail even when a part the dependencies are unavailable.
+//
+// https://docs.gradle.org/7.6.1/userguide/dependency_locking.html#generating_and_updating_dependency_locks
+task checkDependencies {
+    notCompatibleWithConfigurationCache("The task \"checkDependencies\" filters configurations at execution time.")
+    doLast {
+        configurations.findAll { it.canBeResolved }.each { it.resolve() }
+    }
+}
+
+// It should not publish a `.module` file in Maven Central.
+// https://docs.gradle.org/current/userguide/publishing_gradle_module_metadata.html#sub:disabling-gmm-publication
+tasks.withType(GenerateModuleMetadata) {
+    enabled = false
+}
+
 publishing {
     publications {
         maven(MavenPublication) {
@@ -109,6 +130,7 @@ publishing {
                         // http://central.sonatype.org/pages/requirements.html#license-information
                         name = "The Apache License, Version 2.0"
                         url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+                        distribution = "repo"
                     }
                 }
 
@@ -123,7 +145,7 @@ publishing {
                     }
                     developer {
                         name = "Dai MIKURUBE"
-                        email = "dmikurube@treasure-data.com"
+                        email = "dmikurube@acm.org"
                     }
                 }
 
@@ -163,7 +185,7 @@ signing {
 
 gem {
     authors = [ "Sadayuki Furuhashi", "Muga Nishizawa", "Dai MIKURUBE" ]
-    email = [ "frsyuki@gmail.com", "muga.nishizawa@gmail.com", "dmikurube@treasure-data.com" ]
+    email = [ "frsyuki@gmail.com", "muga.nishizawa@gmail.com", "dmikurube@acm.org" ]
     summary = "MessagePack parser plugin for Embulk"
     homepage = "https://github.com/embulk/embulk-parser-msgpack"
     licenses = [ "Apache-2.0" ]
