@@ -54,6 +54,7 @@ dependencies {
     implementation "org.embulk:embulk-util-dynamic:0.1.1"
 
     testImplementation "junit:junit:4.13.2"
+    testImplementation "org.slf4j:slf4j-simple:2.0.7"
     testImplementation "org.embulk:embulk-spi:0.11"
     testImplementation "org.embulk:embulk-junit4:0.11.1"
     testImplementation "org.embulk:embulk-core:0.11.1"

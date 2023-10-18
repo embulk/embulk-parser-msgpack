@@ -77,6 +77,8 @@ import org.embulk.util.dynamic.NullDefaultValueSetter;
 import org.embulk.util.dynamic.StringColumnSetter;
 import org.embulk.util.dynamic.TimestampColumnSetter;
 import org.embulk.util.timestamp.TimestampFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MsgpackParserPlugin
         implements ParserPlugin
@@ -649,10 +651,12 @@ public class MsgpackParserPlugin
             return integer;
         }
 
+        logger.debug("MessagePack integer {} is based on BigInteger", integer.toString());
         if (integer.isInLongRange()) {
             return ValueFactory.newInteger(integer.toLong());
         }
 
+        logger.warn("MessagePack integer {} is out of long, fallback to null", integer.toString());
         return ValueFactory.newNil();
     }
 
@@ -694,6 +698,8 @@ public class MsgpackParserPlugin
         }
         return map;
     }
+
+    private static Logger logger = LoggerFactory.getLogger(MsgpackParserPlugin.class);
 
     private static final ConfigMapperFactory CONFIG_MAPPER_FACTORY = ConfigMapperFactory.builder().addDefaultModules().build();
     private static final ConfigMapper CONFIG_MAPPER = CONFIG_MAPPER_FACTORY.createConfigMapper();
