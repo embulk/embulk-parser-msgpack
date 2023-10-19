@@ -2,6 +2,13 @@
 
 Parses files encoded in MessagePack.
 
+## Versions
+
+| embulk-parser-msgpack | Embulk |
+| v0.4.0 | Embulk v0.10.41 or earlier |
+| v0.5.0 | Embulk v0.9 - v0.11 (It will stop working after Embulk v1.0.0.) |
+| v0.6.0 | Embulk v0.10.42 and later, including v0.11 |
+
 ## Overview
 
 * **Plugin type**: parser
