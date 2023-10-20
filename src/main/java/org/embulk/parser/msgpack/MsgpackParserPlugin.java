@@ -27,21 +27,8 @@ import java.util.Comparator;
 import java.io.IOException;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
 import org.embulk.spi.Exec;
 import org.embulk.spi.type.Types;
-import org.msgpack.core.MessagePack;
-import org.msgpack.core.MessageFormat;
-import org.msgpack.core.MessageUnpacker;
-import org.msgpack.core.MessageInsufficientBufferException;
-import org.msgpack.core.buffer.MessageBuffer;
-import org.msgpack.core.buffer.MessageBufferInput;
-import org.msgpack.value.ArrayValue;
-import org.msgpack.value.IntegerValue;
-import org.msgpack.value.MapValue;
-import org.msgpack.value.Value;
-import org.msgpack.value.ValueFactory;
-import org.msgpack.value.impl.ImmutableLongValueImpl;
 import org.embulk.config.ConfigException;
 import org.embulk.config.ConfigSource;
 import org.embulk.config.TaskSource;
@@ -52,6 +39,7 @@ import org.embulk.spi.PageOutput;
 import org.embulk.spi.Schema;
 import org.embulk.spi.Column;
 import org.embulk.spi.PageBuilder;
+import org.embulk.spi.json.JsonValue;
 import org.embulk.spi.type.Type;
 import org.embulk.spi.type.BooleanType;
 import org.embulk.spi.type.LongType;
@@ -76,6 +64,16 @@ import org.embulk.util.dynamic.LongColumnSetter;
 import org.embulk.util.dynamic.NullDefaultValueSetter;
 import org.embulk.util.dynamic.StringColumnSetter;
 import org.embulk.util.dynamic.TimestampColumnSetter;
+import org.embulk.util.msgpack.core.MessagePack;
+import org.embulk.util.msgpack.core.MessageFormat;
+import org.embulk.util.msgpack.core.MessageUnpacker;
+import org.embulk.util.msgpack.core.MessageInsufficientBufferException;
+import org.embulk.util.msgpack.core.buffer.MessageBuffer;
+import org.embulk.util.msgpack.core.buffer.MessageBufferInput;
+import org.embulk.util.msgpack.value.ArrayValue;
+import org.embulk.util.msgpack.value.IntegerValue;
+import org.embulk.util.msgpack.value.MapValue;
+import org.embulk.util.msgpack.value.impl.ImmutableLongValueImpl;
 import org.embulk.util.timestamp.TimestampFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -157,7 +155,7 @@ public class MsgpackParserPlugin
             throw new ConfigException(String.format("Invalid FileEncoding '%s'. Available options are sequence or array", name));
         }
 
-        @JsonValue
+        @com.fasterxml.jackson.annotation.JsonValue
         @Override
         public String toString()
         {
@@ -192,7 +190,7 @@ public class MsgpackParserPlugin
             throw new ConfigException(String.format("Invalid RowEncoding '%s'. Available options are array or map", name));
         }
 
-        @JsonValue
+        @com.fasterxml.jackson.annotation.JsonValue
         @Override
         public String toString()
         {
@@ -357,9 +355,9 @@ public class MsgpackParserPlugin
                     }
 
                     while (true) {
-                        Value v;
+                        final JsonValue v;
                         try {
-                            v = unpacker.unpackValue();
+                            v = unpacker.unpackAsJsonValue();
                             if (v == null) {
                                 break;
                             }
@@ -369,7 +367,7 @@ public class MsgpackParserPlugin
                         }
 
                         // The unpacked Value object is set to a page as a Json column value.
-                        pageBuilder.setJson(0, repackValueInLongRange(v));
+                        pageBuilder.setJson(0, v);
                         pageBuilder.addRecord();
                     }
                 }
@@ -507,7 +505,7 @@ public class MsgpackParserPlugin
 
         case ARRAY:
         case MAP:
-            setter.set(repackValueInLongRange(unpacker.unpackValue()));
+            setter.set(unpacker.unpackAsJsonValue());
             break;
 
         case EXTENSION:
@@ -632,71 +630,6 @@ public class MsgpackParserPlugin
                 return o1.size() - o2.size();
             }
         }
-    }
-
-    private static Value repackValueInLongRange(final Value value) {
-        if (value.isIntegerValue()) {
-            return repackIntegerValueInLongRange(value.asIntegerValue());
-        } else if (value.isArrayValue()) {
-            return repackArrayValueInLongRange(value.asArrayValue());
-        } else if (value.isMapValue()) {
-            return repackMapValueInLongRange(value.asMapValue());
-        }
-
-        return value;
-    }
-
-    private static Value repackIntegerValueInLongRange(final IntegerValue integer) {
-        if (integer instanceof ImmutableLongValueImpl) {
-            return integer;
-        }
-
-        logger.debug("MessagePack integer {} is based on BigInteger", integer.toString());
-        if (integer.isInLongRange()) {
-            return ValueFactory.newInteger(integer.toLong());
-        }
-
-        logger.warn("MessagePack integer {} is out of long, fallback to null", integer.toString());
-        return ValueFactory.newNil();
-    }
-
-    private static ArrayValue repackArrayValueInLongRange(final ArrayValue array) {
-        boolean isRepacked = false;
-        Value[] newArray = new Value[array.size()];
-        int i = 0;
-
-        for (final Value element : array) {
-            newArray[i] = repackValueInLongRange(element);
-            if (newArray[i] != element) {  // Comparing the object ID.
-                isRepacked = true;
-            }
-            i++;
-        }
-
-        if (isRepacked) {
-            return ValueFactory.newArray(newArray, true);
-        }
-        return array;
-    }
-
-    private static MapValue repackMapValueInLongRange(final MapValue map) {
-        boolean isRepacked = false;
-        Value[] newKvs = new Value[map.size() * 2];
-        int i = 0;
-
-        for (final Map.Entry<Value, Value> entry : map.entrySet()) {
-            newKvs[i] = repackValueInLongRange(entry.getKey());
-            newKvs[i + 1] = repackValueInLongRange(entry.getValue());
-            if (newKvs[i] != entry.getKey() || newKvs[i + 1] != entry.getValue()) {  // Comparing the object ID.
-                isRepacked = true;
-            }
-            i += 2;
-        }
-
-        if (isRepacked) {
-            return ValueFactory.newMap(newKvs, true);
-        }
-        return map;
     }
 
     private static Logger logger = LoggerFactory.getLogger(MsgpackParserPlugin.class);
