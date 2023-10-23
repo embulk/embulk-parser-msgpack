@@ -1,0 +1,66 @@
+embulk-parser-msgpack
+Copyright 2015-2023 Sadayuki Furuhashi, and the Embulk project.
+
+This product includes software developed at
+The Embulk project (https://www.embulk.org/).
+
+
+
+The RubyGems distribution of this product includes a modified portion of
+MessagePack for Java, licensed under
+the Apache License, Version 2.0.
+
+* The NOTICE file of MessagePack for Java is embedded in this NOTICE below.
+
+
+
+The RubyGems distribution of this product includes
+Jackson JSON processor, developed by
+Tatu Saloranta, tatu.saloranta@iki.fi, licensed under
+the Apache License, Version 2.0.
+
+* Copyright (c) 2007- Tatu Saloranta, tatu.saloranta@iki.fi
+* The NOTICE file of Jackson JSON processor is embedded in this NOTICE below.
+
+
+
+The RubyGems distribution of this product includes
+the Bean Validation API 1.1, developed by
+the JSR-349 Expert Group (https://beanvalidation.org/1.1/), licensed under
+the Apache License, Version 2.0.
+
+
+
+NOTICE of MessagePack for Java
+-------------------------------
+
+This product includes the software developed by third-party:
+
+ * Google Guava https://code.google.com/p/guava-libraries/  (APL2)
+ * sbt-extras: https://github.com/paulp/sbt-extras  (BSD)  (LICENSE.sbt-extras.txt)
+
+
+
+NOTICE of Jackson JSON processor
+---------------------------------
+
+# Jackson JSON processor
+
+Jackson is a high-performance, Free/Open Source JSON processing library.
+It was originally written by Tatu Saloranta (tatu.saloranta@iki.fi), and has
+been in development since 2007.
+It is currently developed by a community of developers, as well as supported
+commercially by FasterXML.com.
+
+## Licensing
+
+Jackson core and extension components may be licensed under different licenses.
+To find the details that apply to this artifact see the accompanying LICENSE file.
+For more information, including possible other licensing options, contact
+FasterXML.com (http://fasterxml.com).
+
+## Credits
+
+A list of contributors may be found from CREDITS file, which is included
+in some artifacts (usually source distributions); but is always available
+from the source code management (SCM) system project uses.
