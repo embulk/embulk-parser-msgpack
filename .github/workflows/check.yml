@@ -24,4 +24,4 @@ jobs:
         distribution: "temurin"
         cache: "gradle"
     - name: Check
-      run: ./gradlew --stacktrace check
+      run: ./gradlew --stacktrace :check embulk-guess-msgpack:check

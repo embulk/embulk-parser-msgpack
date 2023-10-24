@@ -1,0 +1,2 @@
+rootProject.name = "embulk-parser-msgpack"
+include "embulk-guess-msgpack"

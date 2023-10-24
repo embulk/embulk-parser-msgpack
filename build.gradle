@@ -73,21 +73,18 @@ embulkPlugin {
 jar {
     metaInf {
         from rootProject.file("LICENSE")
-        from rootProject.file("NOTICE")
     }
 }
 
 sourcesJar {
     metaInf {
         from rootProject.file("LICENSE")
-        from rootProject.file("NOTICE")
     }
 }
 
 javadocJar {
     metaInf {
         from rootProject.file("LICENSE")
-        from rootProject.file("NOTICE")
     }
 }
 
@@ -192,13 +189,9 @@ gem {
     homepage = "https://github.com/embulk/embulk-parser-msgpack"
     licenses = [ "Apache-2.0" ]
 
-    into("lib/embulk/guess/") {
-        from "lib/embulk/guess/msgpack.rb"
-    }
-
     from rootProject.file("LICENSE")
-    from rootProject.file("NOTICE_GEM")
-    rename ("NOTICE_GEM", "NOTICE")
+    from rootProject.file("NOTICE-parser-gem")
+    rename ("NOTICE-parser-gem", "NOTICE")
 }
 
 gemPush {
